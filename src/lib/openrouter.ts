@@ -46,13 +46,13 @@ export async function streamChat(
   }
 
   const reader = res.body.getReader()
-  const decoder = new TextDecoder('utf-8', { stream: true })
+  const decoder = new TextDecoder('utf-8')
 
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
 
-    const lines = decoder.decode(value).split('\n')
+    const lines = decoder.decode(value, { stream: true }).split('\n')
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue
       const data = line.slice(6).trim()
