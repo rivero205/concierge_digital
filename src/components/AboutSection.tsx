@@ -34,7 +34,13 @@ export default function AboutSection() {
       {isVideo(ABOUT_MEDIA) ? (
         <video className="absolute inset-0 w-full h-full object-cover" src={ABOUT_MEDIA} autoPlay loop muted playsInline />
       ) : (
-        <img className="absolute inset-0 w-full h-full object-cover" src={ABOUT_MEDIA} alt="" />
+        <img
+          className="absolute inset-0 w-full h-full object-cover"
+          src={ABOUT_MEDIA}
+          alt=""
+          loading="eager"
+          decoding="async"
+        />
       )}
 
       <div className="absolute inset-0 bg-black/40" />

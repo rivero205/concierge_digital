@@ -31,7 +31,14 @@ export default function HeroSection() {
         {isVideo(HERO_MEDIA) ? (
           <video className="w-full h-full object-cover" src={HERO_MEDIA} autoPlay loop muted playsInline />
         ) : (
-          <img className="w-full h-full object-cover" src={HERO_MEDIA} alt="" />
+          <img
+            className="w-full h-full object-cover"
+            src={HERO_MEDIA}
+            alt=""
+            loading="eager"
+            decoding="sync"
+            fetchPriority="high"
+          />
         )}
       </div>
 

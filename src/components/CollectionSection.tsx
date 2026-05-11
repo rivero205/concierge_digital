@@ -62,6 +62,8 @@ export default function CollectionSection({ onActivate }: { onActivate?: () => v
         <img
           src="/videos/collection1.png"
           alt=""
+          loading="eager"
+          decoding="async"
           className={`w-[80%] sm:w-[65%] lg:w-[50%] max-h-[70vh] object-contain scroll-fade-up stagger-3 ${inView ? 'is-visible' : ''}`}
         />
         <button
