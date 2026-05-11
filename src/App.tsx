@@ -27,7 +27,7 @@ export default function App() {
   }
 
   return (
-    <div className="relative bg-background min-h-screen text-cream">
+    <div className="relative bg-black min-h-screen text-cream">
 
       {/* Fixed full-screen texture overlay */}
       <div
