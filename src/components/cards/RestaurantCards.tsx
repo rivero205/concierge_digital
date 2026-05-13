@@ -6,10 +6,9 @@ import { Booking } from '../../context/GuestContext'
 
 type Props = {
   onBooked: (msg: string) => void
-  onAskParty: (restaurant: Restaurant) => void
 }
 
-export default function RestaurantCards({ onBooked, onAskParty }: Props) {
+export default function RestaurantCards({ onBooked }: Props) {
   const { guest, addBooking } = useGuest()
   const [booked, setBooked] = useState<string[]>([])
 
@@ -17,22 +16,20 @@ export default function RestaurantCards({ onBooked, onAskParty }: Props) {
     r.cities.includes(guest.city) || guest.city === ''
   ).slice(0, 5)
 
-  function reserve(r: Restaurant, party = '2 personas', time = '9:00 PM') {
+  function reserve(r: Restaurant) {
     const booking: Booking = {
-      id: `restaurant-${r.id}-${Date.now()}`,
+      id: `restaurant-${Date.now()}`,
       type: 'restaurant',
       title: r.name,
       subtitle: `${r.cuisine} · ${r.zone}`,
-      datetime: `Hoy · ${time}`,
-      detail: `${party}`,
+      datetime: 'Esta noche · 9:00 PM',
+      detail: '2 personas',
       confirmedAt: Date.now(),
     }
     addBooking(booking)
     setBooked(prev => [...prev, r.id])
-    onBooked(`Perfecto. Mesa en ${r.name} reservada para ${party} a las ${time}. Recibirás confirmación en breve.`)
+    onBooked(`Perfecto. Mesa en **${r.name}** reservada para 2 personas esta noche a las 9:00 PM. Recibirás confirmación en breve.`)
   }
-  // Expose reserve so parent can confirm after collecting party size
-  void reserve
 
   return (
     <div style={{ width: '100%' }}>
@@ -59,7 +56,7 @@ export default function RestaurantCards({ onBooked, onAskParty }: Props) {
                 {isBooked ? (
                   <div style={{ fontFamily: '"Anton", sans-serif', fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#C8FF00', textAlign: 'center' }}>✓ RESERVADO</div>
                 ) : (
-                  <button onClick={() => { onAskParty(r) }}
+                  <button onClick={() => reserve(r)}
                     style={{ width: '100%', fontFamily: '"Anton", sans-serif', fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', background: '#C8FF00', color: '#000', border: 'none', borderRadius: 100, padding: '7px 0', cursor: 'pointer' }}>
                     RESERVAR MESA
                   </button>
