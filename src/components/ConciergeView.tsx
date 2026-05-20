@@ -240,9 +240,8 @@ export default function ConciergeView() {
       headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text: ELEVENLABS_INTRO[lang],
-        model_id: 'eleven_multilingual_v2',
+        model_id: 'eleven_v3',
         language_code: lang,
-        voice_settings: { stability: 0.4, similarity_boost: 0.8, style: 0.3, use_speaker_boost: true },
       }),
     })
       .then(res => res.ok ? res.blob() : null)
