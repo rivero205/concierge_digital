@@ -2,12 +2,12 @@
 
 // ── SpeechRecognition type shims ───────────────────────────────────────────────
 interface SpeechRecognitionAlternative { readonly transcript: string; readonly confidence: number }
-interface SpeechRecognitionResult { readonly length: number; item(index: number): SpeechRecognitionAlternative; [index: number]: SpeechRecognitionAlternative }
+interface SpeechRecognitionResult { readonly length: number; readonly isFinal: boolean; item(index: number): SpeechRecognitionAlternative; [index: number]: SpeechRecognitionAlternative }
 interface SpeechRecognitionResultList { readonly length: number; item(index: number): SpeechRecognitionResult; [index: number]: SpeechRecognitionResult }
 interface SpeechRecognitionEvent extends Event { readonly resultIndex: number; readonly results: SpeechRecognitionResultList }
 interface SpeechRecognitionErrorEvent extends Event { readonly error: string }
 interface SpeechRecognitionInstance extends EventTarget {
-  lang: string; interimResults: boolean; maxAlternatives: number
+  lang: string; interimResults: boolean; maxAlternatives: number; continuous: boolean
   onresult: ((event: SpeechRecognitionEvent) => void) | null
   onerror: ((event: SpeechRecognitionErrorEvent) => void) | null
   onend: (() => void) | null
