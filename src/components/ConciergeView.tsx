@@ -675,7 +675,7 @@ export default function ConciergeView() {
       )}
 
       {/* Gooey blobs */}
-      <div ref={gooeyWrapRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      <div ref={gooeyWrapRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0 }}>
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'url(#cv-gooey)' }}>
           <div ref={blob1Ref} style={{ position: 'absolute', width: 340, height: 340, borderRadius: '50%', background: '#C8FF00', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }} />
           <div ref={blob2Ref} style={{ position: 'absolute', width: 270, height: 270, borderRadius: '50%', background: '#C8FF00', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }} />
@@ -684,7 +684,7 @@ export default function ConciergeView() {
       </div>
 
       {/* Intro logo */}
-      <div ref={introTxtRef} style={{ position: 'absolute', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+      <div ref={introTxtRef} style={{ position: 'absolute', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', opacity: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div style={{ fontFamily: '"Anton", sans-serif', fontSize: 'clamp(18px,2.4vw,28px)', letterSpacing: '0.45em', textTransform: 'uppercase', color: '#000', lineHeight: 1 }}>CONCIERGE</div>
           <div style={{ fontFamily: '"Condiment", cursive', fontSize: 'clamp(46px,6.5vw,76px)', color: '#000', lineHeight: 1, marginTop: -6, letterSpacing: '0.01em', alignSelf: 'flex-end', marginRight: '-8%', transform: 'rotate(-2deg)' }}>Digital</div>
