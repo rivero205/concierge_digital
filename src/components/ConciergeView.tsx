@@ -21,6 +21,7 @@ declare global {
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { gsap } from 'gsap'
 import { Mic, MicOff, VolumeX, Volume2, Calendar } from 'lucide-react'
+import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js'
 import { useGuest } from '../context/GuestContext'
 import TransportCards from './cards/TransportCards'
 import RestaurantCards from './cards/RestaurantCards'
@@ -42,7 +43,8 @@ type LocalMsg = { role: 'user' | 'assistant'; content: string; type?: MsgType; d
 
 // ── Multilingual content ──────────────────────────────────────────────────────
 
-const ELEVENLABS_VOICE_ID = 'NOpBlnGInO9m6vDvFkFC'
+// George (JBFqnCBsd6RMkjVDRZzb) — premade voice available on all plans including free
+const ELEVENLABS_VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'
 
 // Short, punchy — played by ElevenLabs during the blob animation
 const ELEVENLABS_INTRO: Record<Lang, string> = {
@@ -228,25 +230,21 @@ export default function ConciergeView() {
   const introAudioRef = useRef<HTMLAudioElement | null>(null)
   const introPlayedRef = useRef(false)
 
-  // Prefetch ElevenLabs intro audio immediately on mount
+  // Prefetch ElevenLabs intro audio immediately on mount using the official SDK
   useEffect(() => {
     const apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY
     if (!apiKey) return
 
     let blobUrl: string | null = null
+    const elevenlabs = new ElevenLabsClient({ apiKey })
 
-    fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
-      method: 'POST',
-      headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: ELEVENLABS_INTRO[lang],
-        model_id: 'eleven_v3',
-        language_code: lang,
-      }),
+    elevenlabs.textToSpeech.convert(ELEVENLABS_VOICE_ID, {
+      text: ELEVENLABS_INTRO[lang],
+      modelId: 'eleven_v3',
+      outputFormat: 'mp3_44100_128',
     })
-      .then(res => res.ok ? res.blob() : null)
-      .then(blob => {
-        if (!blob) return
+      .then(async stream => {
+        const blob = await new Response(stream as unknown as ReadableStream).blob()
         blobUrl = URL.createObjectURL(blob)
         const audio = new Audio(blobUrl)
         audio.onended = () => { if (blobUrl) URL.revokeObjectURL(blobUrl) }
@@ -256,7 +254,7 @@ export default function ConciergeView() {
           .then(() => { introPlayedRef.current = true })
           .catch(() => { /* will retry on first user interaction */ })
       })
-      .catch(() => {})
+      .catch(e => console.error('[ElevenLabs]', e))
 
     return () => { if (blobUrl) URL.revokeObjectURL(blobUrl) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
