@@ -264,7 +264,8 @@ type Phase = 'intro' | 'interface'
 
 export default function ConciergeView() {
   const { guest } = useGuest()
-  const [lang] = useState<Lang>(() => detectLang())
+  const [lang, setLang] = useState<Lang>(() => detectLang())
+  const [langOpen, setLangOpen] = useState(false)
   const [phase, setPhase] = useState<Phase>('intro')
   const [messages, setMessages] = useState<LocalMsg[]>([])
   const [input, setInput] = useState('')
@@ -273,6 +274,7 @@ export default function ConciergeView() {
   const [showItinerary, setShowItinerary] = useState(false)
   const [muted, setMuted] = useState(false)
   const [listening, setListening] = useState(false)
+  const [micLevel, setMicLevel] = useState(0)
   const prevBookingsLen = useRef(guest.bookings.length)
   const fallbackIdx = useRef(0)
   const upsellShownRef = useRef<Set<'transport' | 'restaurant'>>(new Set())
@@ -290,9 +292,16 @@ export default function ConciergeView() {
   const thinkRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const simRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
+  const pendingVoiceRef = useRef<string | null>(null)
+  const micStreamRef = useRef<MediaStream | null>(null)
+  const micCtxRef = useRef<AudioContext | null>(null)
+  const micAnalyserRef = useRef<AnalyserNode | null>(null)
+  const micRafRef = useRef<number | null>(null)
   // ElevenLabs intro — prefetched, played on first interaction if autoplay was blocked
   const introAudioRef = useRef<HTMLAudioElement | null>(null)
   const introPlayedRef = useRef(false)
+  const lastMsgRef = useRef<HTMLDivElement>(null)
+  const msgCountRef = useRef(0)
 
   // Prefetch ElevenLabs intro audio immediately on mount using the official SDK
   useEffect(() => {
@@ -361,12 +370,38 @@ export default function ConciergeView() {
     if (thinkRef.current) clearTimeout(thinkRef.current)
     if (simRef.current) clearInterval(simRef.current)
     window.speechSynthesis?.cancel()
+    if (micRafRef.current) cancelAnimationFrame(micRafRef.current)
+    micStreamRef.current?.getTracks().forEach(t => t.stop())
+    micCtxRef.current?.close()
   }, [])
 
   useEffect(() => {
     const el = msgsRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (!el) return
+    const prev = msgCountRef.current
+    msgCountRef.current = messages.length
+    const last = messages[messages.length - 1]
+    const isCard = last?.type === 'transport' || last?.type === 'restaurant' || last?.type === 'driver'
+    const isNew = messages.length > prev
+    if (isNew && isCard) {
+      setTimeout(() => {
+        const container = msgsRef.current
+        const msg = lastMsgRef.current
+        if (!container || !msg) return
+        const offset = msg.getBoundingClientRect().top - container.getBoundingClientRect().top
+        container.scrollTop += offset - 24
+      }, 80)
+    } else if (!isCard) {
+      el.scrollTop = el.scrollHeight
+    }
   }, [messages, thinking])
+
+  useEffect(() => {
+    if (thinking || !pendingVoiceRef.current) return
+    const transcript = pendingVoiceRef.current
+    pendingVoiceRef.current = null
+    setTimeout(() => send(transcript), 0)
+  }, [thinking])
 
   useEffect(() => {
     if (phase === 'interface') setTimeout(() => inputRef.current?.focus(), 200)
@@ -412,7 +447,7 @@ export default function ConciergeView() {
   function skipIntro() {
     gsapCtxRef.current?.revert()
     gsapCtxRef.current = null
-    gsap.set(gooeyWrapRef.current, { opacity: 0 })
+    gsap.set([gooeyWrapRef.current, introTxtRef.current], { opacity: 0 })
     gsap.set(uiRef.current, { opacity: 1, y: 0 })
     setPhase('interface')
   }
@@ -481,17 +516,95 @@ export default function ConciergeView() {
     }, 900)
   }
 
+  function changeLang(l: Lang) {
+    setLang(l)
+    setLangOpen(false)
+    setMessages([{ role: 'assistant', content: WELCOME_COPY[l](getGreeting(l)) }])
+    upsellShownRef.current = new Set()
+    fallbackIdx.current = 0
+    setThinking(false)
+    if (thinkRef.current) { clearTimeout(thinkRef.current); thinkRef.current = null }
+    if (simRef.current) { clearInterval(simRef.current); simRef.current = null }
+  }
+
   function toggleVoice() {
     playIntroIfPending()
     const SR: SpeechRecognitionConstructor | undefined = window.SpeechRecognition ?? window.webkitSpeechRecognition
     if (!SR) return
-    if (listening) { recognitionRef.current?.stop(); setListening(false); return }
+    if (listening) {
+      recognitionRef.current?.stop()
+      return // onend se encarga de setListening(false)
+    }
     const rec = new SR()
-    rec.lang = LOCALE[lang]; rec.interimResults = false; rec.maxAlternatives = 1
-    rec.onresult = (e: SpeechRecognitionEvent) => { setListening(false); send(e.results[0][0].transcript) }
-    rec.onerror = () => setListening(false)
-    rec.onend = () => setListening(false)
-    recognitionRef.current = rec; rec.start(); setListening(true)
+    rec.lang = LOCALE[lang]
+    rec.continuous = false
+    rec.interimResults = true
+    rec.maxAlternatives = 1
+    rec.onresult = (e: SpeechRecognitionEvent) => {
+      let interim = ''
+      let final = ''
+      for (let i = e.resultIndex; i < e.results.length; i += 1) {
+        const result = e.results[i]
+        const text = result[0].transcript
+        if (result.isFinal) final += `${text} `
+        else interim += `${text} `
+      }
+      const transcript = (final || interim).trim()
+      if (!transcript) return
+      setInput(transcript)
+      if (!final.trim()) return
+      if (thinking) pendingVoiceRef.current = transcript
+      else setTimeout(() => send(transcript), 250)
+    }
+    rec.onerror = (e: SpeechRecognitionErrorEvent) => {
+      setListening(false)
+      stopMicMeter()
+      if (e.error === 'not-allowed') alert('Permiso de micrófono denegado. Habilítalo en Configuración del navegador.')
+    }
+    rec.onend = () => { setListening(false); stopMicMeter() }
+    recognitionRef.current = rec
+    rec.start()
+    setListening(true)
+    startMicMeter()
+  }
+
+  function startMicMeter() {
+    if (micCtxRef.current || micStreamRef.current) return
+    navigator.mediaDevices?.getUserMedia({ audio: true }).then(stream => {
+      micStreamRef.current = stream
+      const ctx = new (window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+      micCtxRef.current = ctx
+      const source = ctx.createMediaStreamSource(stream)
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 1024
+      micAnalyserRef.current = analyser
+      source.connect(analyser)
+      const data = new Uint8Array(analyser.fftSize)
+      const tick = () => {
+        analyser.getByteTimeDomainData(data)
+        let sum = 0
+        for (let i = 0; i < data.length; i += 1) {
+          const v = (data[i] - 128) / 128
+          sum += v * v
+        }
+        const rms = Math.min(1, Math.sqrt(sum / data.length) * 2.2)
+        setMicLevel(rms)
+        micRafRef.current = requestAnimationFrame(tick)
+      }
+      tick()
+    }).catch(() => {
+      setMicLevel(0)
+    })
+  }
+
+  function stopMicMeter() {
+    if (micRafRef.current) { cancelAnimationFrame(micRafRef.current); micRafRef.current = null }
+    micStreamRef.current?.getTracks().forEach(t => t.stop())
+    micStreamRef.current = null
+    micAnalyserRef.current = null
+    micCtxRef.current?.close()
+    micCtxRef.current = null
+    setMicLevel(0)
   }
 
   function handleBooked(confirmMsg: string, bookedType: 'transport' | 'restaurant') {
@@ -590,6 +703,25 @@ export default function ConciergeView() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', fontFamily: '"Anton", sans-serif' }}>FIFA 2026 · MX</span>
+
+            {/* Language selector */}
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setLangOpen(o => !o)}
+                style={{ height: 32, padding: '0 12px', borderRadius: 100, border: `1px solid ${langOpen ? '#C8FF00' : 'rgba(255,255,255,0.1)'}`, background: 'transparent', color: langOpen ? '#C8FF00' : 'rgba(255,255,255,0.45)', fontFamily: '"Anton", sans-serif', fontSize: 10, letterSpacing: '0.14em', cursor: 'pointer' }}>
+                {lang.toUpperCase()}
+              </button>
+              {langOpen && (
+                <div style={{ position: 'absolute', top: 38, right: 0, background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, overflow: 'hidden', zIndex: 200, minWidth: 64 }}>
+                  {(['es', 'en', 'pt', 'fr'] as Lang[]).map(l => (
+                    <button key={l} onClick={() => changeLang(l)}
+                      style={{ display: 'block', width: '100%', padding: '9px 16px', background: l === lang ? 'rgba(200,255,0,0.1)' : 'transparent', border: 'none', color: l === lang ? '#C8FF00' : 'rgba(255,255,255,0.55)', fontFamily: '"Anton", sans-serif', fontSize: 10, letterSpacing: '0.14em', textAlign: 'left', cursor: 'pointer' }}>
+                      {l.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <button onClick={() => setMuted(m => !m)}
               style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: muted ? 'rgba(255,255,255,0.25)' : '#C8FF00', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
@@ -610,8 +742,9 @@ export default function ConciergeView() {
         <div ref={msgsRef} className="cv-msgs" style={{ flex: 1, overflowY: 'auto', padding: 'clamp(24px,4vw,48px) clamp(16px,5vw,48px) 16px', display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 860, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
           {messages.map((m, i) => {
             const isCard = m.type === 'transport' || m.type === 'restaurant' || m.type === 'driver'
+            const isLast = i === messages.length - 1
             return (
-              <div key={i} style={{ display: 'flex', flexDirection: m.role === 'user' ? 'row-reverse' : 'row', alignItems: 'flex-start', gap: 14 }}>
+              <div key={i} ref={isLast ? lastMsgRef : null} style={{ display: 'flex', flexDirection: m.role === 'user' ? 'row-reverse' : 'row', alignItems: 'flex-start', gap: 14 }}>
                 {m.role === 'assistant' && (
                   <div style={{ flexShrink: 0, marginTop: 4, width: 24, height: 24, borderRadius: '50%', background: '#C8FF00', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 12px rgba(200,255,0,0.4)' }}>
                     <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#000' }} />
@@ -676,6 +809,13 @@ export default function ConciergeView() {
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send(input)}
               placeholder={thinking ? placeholder.thinking : placeholder.idle} disabled={thinking}
               style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#EFF4FF', fontSize: 'clamp(13px,1.4vw,15px)', padding: '12px 0', fontFamily: 'system-ui, sans-serif' }} />
+            {listening && (
+              <div style={{ display: 'flex', gap: 3, paddingRight: 6, alignItems: 'center' }} aria-hidden>
+                {[0, 1, 2, 3].map(i => (
+                  <div key={i} style={{ width: 3, height: 16, borderRadius: 8, background: '#C8FF00', opacity: 0.9, transform: `scaleY(${0.35 + micLevel * (1.6 - i * 0.18)})`, transformOrigin: 'center', transition: 'transform 80ms linear' }} />
+                ))}
+              </div>
+            )}
             {hasSpeechRecognition && (
               <button onClick={toggleVoice} style={{
                 width: 52, height: 52, borderRadius: 14, flexShrink: 0,
