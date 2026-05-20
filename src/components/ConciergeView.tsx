@@ -46,12 +46,12 @@ type LocalMsg = { role: 'user' | 'assistant'; content: string; type?: MsgType; d
 // George (JBFqnCBsd6RMkjVDRZzb) — premade voice available on all plans including free
 const ELEVENLABS_VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'
 
-// Short, punchy — played by ElevenLabs during the blob animation
+// eleven_v3 supports inline emotion markers: [excited], [warmly], [whispers], [laughs], etc.
 const ELEVENLABS_INTRO: Record<Lang, string> = {
-  es: 'Bienvenido a Concierge Digital. Tu asistente exclusivo para el Mundial FIFA 2026.',
-  en: 'Welcome to Concierge Digital. Your exclusive assistant for the FIFA World Cup 2026.',
-  pt: 'Bem-vindo ao Concierge Digital. Seu assistente exclusivo para a Copa do Mundo FIFA 2026.',
-  fr: 'Bienvenue sur Concierge Digital. Votre assistant exclusif pour la Coupe du Monde FIFA 2026.',
+  es: '[excited] Bienvenido a Concierge Digital. [warmly] Soy tu asistente exclusivo para el Mundial FIFA 2026. [confidently] Transporte, restaurantes, lo que necesites — estoy aquí.',
+  en: '[excited] Welcome to Concierge Digital. [warmly] I am your exclusive assistant for the FIFA World Cup 2026. [confidently] Transport, restaurants, whatever you need — I have got you covered.',
+  pt: '[excited] Bem-vindo ao Concierge Digital. [warmly] Sou seu assistente exclusivo para a Copa do Mundo FIFA 2026. [confidently] Transporte, restaurantes, o que precisar — estou aqui.',
+  fr: '[excited] Bienvenue sur Concierge Digital. [warmly] Je suis votre assistant exclusif pour la Coupe du Monde FIFA 2026. [confidently] Transport, restaurants, tout ce dont vous avez besoin — je suis là.',
 }
 
 function getGreeting(lang: Lang): string {
@@ -243,7 +243,7 @@ export default function ConciergeView() {
       text: ELEVENLABS_INTRO[lang],
       modelId: 'eleven_v3',
       outputFormat: 'mp3_44100_128',
-      voiceSettings: { stability: 0.5, similarityBoost: 0.8, speed: 1.15 },
+      voiceSettings: { stability: 0.35, similarityBoost: 0.85, style: 0.75, speed: 1.15 },
     })
       .then(async stream => {
         if (cancelled) return
