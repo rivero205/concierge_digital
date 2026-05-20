@@ -83,7 +83,7 @@ export const VEHICLES: Vehicle[] = [
     capacity: 'Hasta 3 personas',
     price: '$45 USD',
     desc: 'Confort y discreción para traslados en ciudad',
-    img: 'https://picsum.photos/seed/car-sedan/600/400',
+    img: '/vehicles/sedan.jpg',
   },
   {
     id: 'v2',
@@ -92,7 +92,7 @@ export const VEHICLES: Vehicle[] = [
     capacity: 'Hasta 5 personas',
     price: '$75 USD',
     desc: 'Espacio y elegancia para grupos pequeños',
-    img: 'https://picsum.photos/seed/car-suv/600/400',
+    img: '/vehicles/suv.jpg',
   },
   {
     id: 'v3',
@@ -101,7 +101,7 @@ export const VEHICLES: Vehicle[] = [
     capacity: 'Hasta 8 personas',
     price: '$120 USD',
     desc: 'Experiencia grupal premium con amenidades a bordo',
-    img: 'https://picsum.photos/seed/car-van/600/400',
+    img: '/vehicles/van.jpg',
   },
 ]
 
@@ -115,6 +115,38 @@ export type Restaurant = {
   img: string
   cities: string[]
 }
+
+export type DriverPackage = {
+  id: string
+  name: string
+  hours: string
+  price: string
+  img: string
+}
+
+export const DRIVER_PACKAGES: DriverPackage[] = [
+  {
+    id: 'drv1',
+    name: 'Medio Día',
+    hours: '4 horas',
+    price: '$120 USD',
+    img: '/vehicles/driver-basico.jpg',
+  },
+  {
+    id: 'drv2',
+    name: 'Día Completo',
+    hours: '8 horas',
+    price: '$220 USD',
+    img: '/vehicles/driver-completo.jpg',
+  },
+  {
+    id: 'drv3',
+    name: '24h VIP',
+    hours: '24 horas',
+    price: '$380 USD',
+    img: '/vehicles/driver-vip.jpg',
+  },
+]
 
 export const RESTAURANTS: Restaurant[] = [
   {

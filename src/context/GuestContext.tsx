@@ -41,6 +41,7 @@ type GuestContextType = {
   guest: GuestProfile
   setGuest: (g: GuestProfile) => void
   addBooking: (b: Booking) => void
+  removeBooking: (id: string) => void
   completeOnboarding: (data: Omit<GuestProfile, 'bookings' | 'onboardingDone'>) => void
 }
 
@@ -70,12 +71,16 @@ export function GuestProvider({ children }: { children: ReactNode }) {
     setGuestState(prev => ({ ...prev, bookings: [b, ...prev.bookings] }))
   }
 
+  function removeBooking(id: string) {
+    setGuestState(prev => ({ ...prev, bookings: prev.bookings.filter(b => b.id !== id) }))
+  }
+
   function completeOnboarding(data: Omit<GuestProfile, 'bookings' | 'onboardingDone'>) {
     setGuestState(prev => ({ ...prev, ...data, onboardingDone: true }))
   }
 
   return (
-    <GuestContext.Provider value={{ guest, setGuest, addBooking, completeOnboarding }}>
+    <GuestContext.Provider value={{ guest, setGuest, addBooking, removeBooking, completeOnboarding }}>
       {children}
     </GuestContext.Provider>
   )
