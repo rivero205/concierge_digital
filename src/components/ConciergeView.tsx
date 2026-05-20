@@ -1,32 +1,27 @@
 // src/components/ConciergeView.tsx
 
-// ── SpeechRecognition type shims (not always present in DOM lib) ──────────────
+// ── SpeechRecognition type shims ───────────────────────────────────────────────
 interface SpeechRecognitionAlternative {
   readonly transcript: string
   readonly confidence: number
 }
-
 interface SpeechRecognitionResult {
   readonly length: number
   item(index: number): SpeechRecognitionAlternative
   [index: number]: SpeechRecognitionAlternative
 }
-
 interface SpeechRecognitionResultList {
   readonly length: number
   item(index: number): SpeechRecognitionResult
   [index: number]: SpeechRecognitionResult
 }
-
 interface SpeechRecognitionEvent extends Event {
   readonly resultIndex: number
   readonly results: SpeechRecognitionResultList
 }
-
 interface SpeechRecognitionErrorEvent extends Event {
   readonly error: string
 }
-
 interface SpeechRecognitionInstance extends EventTarget {
   lang: string
   interimResults: boolean
@@ -37,9 +32,7 @@ interface SpeechRecognitionInstance extends EventTarget {
   start(): void
   stop(): void
 }
-
 type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance
-
 declare global {
   interface Window {
     SpeechRecognition?: SpeechRecognitionConstructor
@@ -76,6 +69,22 @@ type LocalMsg = {
 }
 
 // ── Multilingual content ──────────────────────────────────────────────────────
+
+const ELEVENLABS_VOICE_ID = 'NOpBlnGInO9m6vDvFkFC'
+
+const INTRO_TEXT: Record<Lang, string> = {
+  es: 'Bienvenido a Concierge Digital. Tu asistente exclusivo para el Mundial FIFA 2026.',
+  en: 'Welcome to Concierge Digital. Your exclusive assistant for the FIFA World Cup 2026.',
+  pt: 'Bem-vindo ao Concierge Digital. Seu assistente exclusivo para a Copa do Mundo FIFA 2026.',
+  fr: 'Bienvenue sur Concierge Digital. Votre assistant exclusif pour la Coupe du Monde FIFA 2026.',
+}
+
+const TAP_TEXT: Record<Lang, string> = {
+  es: 'TOCA PARA COMENZAR',
+  en: 'TAP TO BEGIN',
+  pt: 'TOQUE PARA COMEÇAR',
+  fr: 'APPUYEZ POUR COMMENCER',
+}
 
 function getGreeting(lang: Lang): string {
   const h = new Date().getHours()
@@ -183,20 +192,9 @@ const PLACEHOLDER_BY_LANG: Record<Lang, { idle: string; thinking: string }> = {
 
 // ── Intent detection ──────────────────────────────────────────────────────────
 
-const TRANSPORT_KW = [
-  'transporte', 'driver', 'estadio', 'transfer', 'auto', 'carro', 'van', 'uber', 'ride',
-  'llevar', 'traslado', 'transport', 'car', 'vehicle', 'stadium', 'chauffeur', 'taxi',
-  'motorista', 'estádio', 'coche', 'bus', 'shuttle', 'pickup', 'llevame',
-]
-const RESTAURANT_KW = [
-  'cena', 'cenar', 'restaurante', 'comer', 'mesa', 'dinner', 'food', 'eat', 'reservar',
-  'restaurant', 'hambre', 'hungry', 'table', 'jantar', 'dîner', 'repas', 'manger', 'comida',
-  'almuerzo', 'lunch', 'brunch', 'desayuno', 'breakfast', 'reserva', 'booking', 'resto',
-]
-const ITINERARY_KW = [
-  'itinerario', 'reservas', 'mis planes', 'agenda', 'bookings', 'reservaciones', 'schedule',
-  'itinerary', 'my bookings', 'minhas reservas', 'mes réservations', 'planes', 'ver reservas',
-]
+const TRANSPORT_KW = ['transporte', 'driver', 'estadio', 'transfer', 'auto', 'carro', 'van', 'uber', 'ride', 'llevar', 'traslado', 'transport', 'car', 'vehicle', 'stadium', 'chauffeur', 'taxi', 'motorista', 'estádio', 'coche', 'bus', 'shuttle', 'pickup']
+const RESTAURANT_KW = ['cena', 'cenar', 'restaurante', 'comer', 'mesa', 'dinner', 'food', 'eat', 'reservar', 'restaurant', 'hambre', 'hungry', 'table', 'jantar', 'dîner', 'repas', 'manger', 'comida', 'almuerzo', 'lunch', 'brunch', 'reserva', 'booking', 'resto']
+const ITINERARY_KW = ['itinerario', 'reservas', 'mis planes', 'agenda', 'bookings', 'reservaciones', 'schedule', 'itinerary', 'my bookings', 'minhas reservas', 'mes réservations', 'planes', 'ver reservas']
 
 function detectIntent(text: string): 'transport' | 'restaurant' | 'itinerary' | 'fallback' {
   const low = text.toLowerCase()
@@ -209,19 +207,12 @@ function detectIntent(text: string): 'transport' | 'restaurant' | 'itinerary' | 
 // ── renderMsg ─────────────────────────────────────────────────────────────────
 
 function renderMsg(text: string) {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br/>')
+  return text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>')
 }
 
 // ── TTS / SR locale maps ──────────────────────────────────────────────────────
 
-const LOCALE: Record<Lang, string> = {
-  es: 'es-MX',
-  en: 'en-US',
-  pt: 'pt-BR',
-  fr: 'fr-FR',
-}
+const LOCALE: Record<Lang, string> = { es: 'es-MX', en: 'en-US', pt: 'pt-BR', fr: 'fr-FR' }
 
 function speak(text: string, lang: Lang, muted: boolean) {
   if (muted || !('speechSynthesis' in window)) return
@@ -239,12 +230,12 @@ function speak(text: string, lang: Lang, muted: boolean) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-type Phase = 'intro' | 'interface'
+type Phase = 'tap' | 'intro' | 'interface'
 
 export default function ConciergeView() {
   const { guest } = useGuest()
   const [lang] = useState<Lang>(() => detectLang())
-  const [phase, setPhase] = useState<Phase>('intro')
+  const [phase, setPhase] = useState<Phase>('tap')
   const [messages, setMessages] = useState<LocalMsg[]>([])
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
@@ -268,6 +259,33 @@ export default function ConciergeView() {
   const thinkRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const simRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
+  const tlRef = useRef<gsap.core.Timeline | null>(null)
+  const introAudioRef = useRef<HTMLAudioElement | null>(null)
+  const audioUrlRef = useRef<string | null>(null)
+
+  // Prefetch ElevenLabs intro voice on mount
+  useEffect(() => {
+    const apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY
+    if (!apiKey) return
+
+    fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
+      method: 'POST',
+      headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: INTRO_TEXT[lang], model_id: 'eleven_v3', language_code: lang }),
+    })
+      .then(res => res.ok ? res.blob() : null)
+      .then(blob => {
+        if (!blob) return
+        const url = URL.createObjectURL(blob)
+        audioUrlRef.current = url
+        introAudioRef.current = new Audio(url)
+      })
+      .catch(() => {})
+
+    return () => {
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (guest.bookings.length > prevBookingsLen.current) {
@@ -293,6 +311,7 @@ export default function ConciergeView() {
     if (thinkRef.current) clearTimeout(thinkRef.current)
     if (simRef.current) clearInterval(simRef.current)
     window.speechSynthesis?.cancel()
+    introAudioRef.current?.pause()
   }, [])
 
   useEffect(() => {
@@ -312,21 +331,27 @@ export default function ConciergeView() {
     }
   }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Setup GSAP timeline (paused — plays on tap)
   useEffect(() => {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (reduced) {
       gsap.set(uiRef.current, { opacity: 1, y: 0 })
       gsap.set(gooeyWrapRef.current, { opacity: 0 })
-      setPhase('interface')
       return
     }
+
     const ctx = gsap.context(() => {
       const vw = window.innerWidth
       const vh = window.innerHeight
+
       gsap.set(uiRef.current, { opacity: 0, y: 40 })
       gsap.set(introTxtRef.current, { opacity: 0 })
-      const tl = gsap.timeline({ onComplete: () => setPhase('interface') })
-      tl.from(blob1Ref.current, { x: -vw * 0.40, y: -vh * 0.30, scale: 0.15, opacity: 0, duration: 1.9, ease: 'power3.out' })
+      gsap.set(gooeyWrapRef.current, { opacity: 0 })
+
+      const tl = gsap.timeline({ paused: true, onComplete: () => setPhase('interface') })
+
+      tl.set(gooeyWrapRef.current, { opacity: 1 })
+        .from(blob1Ref.current, { x: -vw * 0.40, y: -vh * 0.30, scale: 0.15, opacity: 0, duration: 1.9, ease: 'power3.out' })
         .from(blob2Ref.current, { x: vw * 0.38, y: -vh * 0.28, scale: 0.15, opacity: 0, duration: 1.9, ease: 'power3.out' }, '-=1.70')
         .from(blob3Ref.current, { x: -vw * 0.02, y: vh * 0.42, scale: 0.15, opacity: 0, duration: 1.9, ease: 'power3.out' }, '-=1.65')
         .to(introTxtRef.current, { opacity: 1, duration: 0.5 }, '-=0.55')
@@ -335,10 +360,27 @@ export default function ConciergeView() {
         .to(introTxtRef.current, { opacity: 0, duration: 0.25 }, '-=0.75')
         .to(gooeyWrapRef.current, { opacity: 0, duration: 0.25 }, '-=0.45')
         .to(uiRef.current, { opacity: 1, y: 0, duration: 0.75, ease: 'power2.out' }, '-=0.15')
+
+      tlRef.current = tl
     }, rootRef)
+
     return () => ctx.revert()
   }, [])
 
+  // ── Tap to begin ──────────────────────────────────────────────────────────
+  function handleTap() {
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    introAudioRef.current?.play().catch(() => {})
+
+    if (reduced) {
+      setPhase('interface')
+    } else {
+      setPhase('intro')
+      tlRef.current?.play()
+    }
+  }
+
+  // ── Simulate typing ───────────────────────────────────────────────────────
   const simulateText = useCallback((content: string, type?: MsgType, extra?: Partial<LocalMsg>) => {
     const newMsg: LocalMsg = { role: 'assistant', content: '', type, ...extra }
     setMessages(prev => [...prev, newMsg])
@@ -359,6 +401,7 @@ export default function ConciergeView() {
     }, 18)
   }, [lang, muted])
 
+  // ── Send message ──────────────────────────────────────────────────────────
   function send(text: string) {
     if (!text.trim() || thinking) return
     setInput('')
@@ -373,7 +416,6 @@ export default function ConciergeView() {
       simulateText(ITINERARY_REPLY_BY_LANG[lang])
       return
     }
-
     if (intent === 'transport') {
       setThinkingMsg(t.transport)
       setThinking(true)
@@ -383,7 +425,6 @@ export default function ConciergeView() {
       }, 1400)
       return
     }
-
     if (intent === 'restaurant') {
       setThinkingMsg(t.restaurant)
       setThinking(true)
@@ -404,25 +445,16 @@ export default function ConciergeView() {
     }, 900)
   }
 
+  // ── Voice input ───────────────────────────────────────────────────────────
   function toggleVoice() {
     const SR: SpeechRecognitionConstructor | undefined = window.SpeechRecognition ?? window.webkitSpeechRecognition
     if (!SR) return
-
-    if (listening) {
-      recognitionRef.current?.stop()
-      setListening(false)
-      return
-    }
-
+    if (listening) { recognitionRef.current?.stop(); setListening(false); return }
     const rec = new SR()
     rec.lang = LOCALE[lang]
     rec.interimResults = false
     rec.maxAlternatives = 1
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      const transcript = e.results[0][0].transcript
-      setListening(false)
-      send(transcript)
-    }
+    rec.onresult = (e: SpeechRecognitionEvent) => { setListening(false); send(e.results[0][0].transcript) }
     rec.onerror = () => setListening(false)
     rec.onend = () => setListening(false)
     recognitionRef.current = rec
@@ -435,9 +467,7 @@ export default function ConciergeView() {
     speak(confirmMsg, lang, muted)
   }
 
-  const hasSpeechRecognition = typeof window !== 'undefined' &&
-    (!!window.SpeechRecognition || !!window.webkitSpeechRecognition)
-
+  const hasSpeechRecognition = typeof window !== 'undefined' && (!!window.SpeechRecognition || !!window.webkitSpeechRecognition)
   const chips = CHIPS_BY_LANG[lang]
   const placeholder = PLACEHOLDER_BY_LANG[lang]
 
@@ -461,7 +491,7 @@ export default function ConciergeView() {
         <div style={{ position: 'absolute', borderRadius: '50%', width: 550, height: 550, right: '-10%', bottom: '5%', background: 'radial-gradient(circle, rgba(200,255,0,0.025) 0%, transparent 68%)', animation: 'cv-drift2 28s ease-in-out infinite' }} />
       </div>
 
-      {/* Gooey blobs intro */}
+      {/* Gooey blobs */}
       <div ref={gooeyWrapRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'url(#cv-gooey)' }}>
           <div ref={blob1Ref} style={{ position: 'absolute', width: 340, height: 340, borderRadius: '50%', background: '#C8FF00', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }} />
@@ -479,7 +509,33 @@ export default function ConciergeView() {
         </div>
       </div>
 
-      {/* Main interface */}
+      {/* ── TAP TO BEGIN overlay ─────────────────────────────────────────────── */}
+      {phase === 'tap' && (
+        <div
+          onClick={handleTap}
+          style={{ position: 'absolute', inset: 0, zIndex: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000', cursor: 'pointer', userSelect: 'none' }}
+        >
+          {/* Logo */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 64 }}>
+            <div style={{ fontFamily: '"Anton", sans-serif', fontSize: 'clamp(22px,3vw,36px)', letterSpacing: '0.45em', textTransform: 'uppercase', color: '#FFF', lineHeight: 1 }}>CONCIERGE</div>
+            <div style={{ fontFamily: '"Condiment", cursive', fontSize: 'clamp(54px,7.5vw,90px)', color: '#C8FF00', lineHeight: 1, marginTop: -4, letterSpacing: '0.01em', alignSelf: 'flex-end', marginRight: '-8%', transform: 'rotate(-2deg)' }}>Digital</div>
+            <div style={{ fontFamily: '"Anton", sans-serif', fontSize: 9, letterSpacing: '0.5em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)', marginTop: 18 }}>FIFA 2026 · MÉXICO</div>
+          </div>
+
+          {/* Pulsing ring + label */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+            <div style={{ position: 'relative', width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1.5px solid #C8FF00', animation: 'cv-tap-ring 2s ease-in-out infinite' }} />
+              <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#C8FF00', boxShadow: '0 0 16px rgba(200,255,0,0.6)' }} />
+            </div>
+            <div style={{ fontFamily: '"Anton", sans-serif', fontSize: 10, letterSpacing: '0.32em', color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase' }}>
+              {TAP_TEXT[lang]}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main chat interface */}
       <div ref={uiRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#000', opacity: 0 }}>
 
         {/* Top bar */}
@@ -506,7 +562,7 @@ export default function ConciergeView() {
           </div>
         </div>
 
-        {/* Messages area */}
+        {/* Messages */}
         <div ref={msgsRef} className="cv-msgs" style={{ flex: 1, overflowY: 'auto', padding: 'clamp(24px,4vw,48px) clamp(16px,5vw,48px) 16px', display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 860, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
           {messages.map((m, i) => (
             <div key={i} style={{ display: 'flex', flexDirection: m.role === 'user' ? 'row-reverse' : 'row', alignItems: 'flex-start', gap: 14 }}>
@@ -521,17 +577,11 @@ export default function ConciergeView() {
                     ? { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: '18px 18px 3px 18px', padding: '11px 16px' }
                     : { padding: '2px 0', marginBottom: (m.type === 'transport' || m.type === 'restaurant') && m.content ? 12 : 0 })
                 }}>
-                  <div
-                    style={{ color: m.role === 'user' ? '#FFF' : 'rgba(255,255,255,0.82)', fontSize: 'clamp(13px,1.4vw,15px)', lineHeight: 1.8, fontFamily: 'system-ui, sans-serif' }}
-                    dangerouslySetInnerHTML={{ __html: renderMsg(m.content) }}
-                  />
+                  <div style={{ color: m.role === 'user' ? '#FFF' : 'rgba(255,255,255,0.82)', fontSize: 'clamp(13px,1.4vw,15px)', lineHeight: 1.8, fontFamily: 'system-ui, sans-serif' }}
+                    dangerouslySetInnerHTML={{ __html: renderMsg(m.content) }} />
                 </div>
-                {m.type === 'transport' && (
-                  <TransportCards destination={m.destination ?? 'Estadio Azteca'} onBooked={handleBooked} />
-                )}
-                {m.type === 'restaurant' && (
-                  <RestaurantCards onBooked={handleBooked} />
-                )}
+                {m.type === 'transport' && <TransportCards destination={m.destination ?? 'Estadio Azteca'} onBooked={handleBooked} />}
+                {m.type === 'restaurant' && <RestaurantCards onBooked={handleBooked} />}
               </div>
             </div>
           ))}
@@ -551,7 +601,7 @@ export default function ConciergeView() {
           )}
         </div>
 
-        {/* Quick action chips */}
+        {/* Chips */}
         <div style={{ maxWidth: 860, width: '100%', margin: '0 auto', padding: '10px clamp(16px,5vw,48px) 0', boxSizing: 'border-box', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {chips.map(c => (
             <button key={c.label} onClick={() => !thinking && send(c.prompt)} disabled={thinking}
@@ -590,13 +640,10 @@ export default function ConciergeView() {
                 {listening ? <MicOff size={22} /> : <Mic size={22} />}
               </button>
             )}
-            <button
-              onClick={() => send(input)}
-              disabled={!input.trim() || thinking}
+            <button onClick={() => send(input)} disabled={!input.trim() || thinking}
               style={{ width: 42, height: 42, borderRadius: 13, border: 'none', flexShrink: 0, background: input.trim() && !thinking ? '#C8FF00' : 'rgba(255,255,255,0.07)', color: input.trim() && !thinking ? '#010828' : 'rgba(255,255,255,0.25)', cursor: input.trim() && !thinking ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="19" x2="12" y2="5"/>
-                <polyline points="5 12 12 5 19 12"/>
+                <line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />
               </svg>
             </button>
           </div>
@@ -605,16 +652,15 @@ export default function ConciergeView() {
           </div>
         </div>
 
-        {showItinerary && (
-          <ItineraryPanel onClose={() => setShowItinerary(false)} />
-        )}
+        {showItinerary && <ItineraryPanel onClose={() => setShowItinerary(false)} />}
       </div>
 
       <style>{`
-        @keyframes cv-drift1 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(50px,70px) scale(1.08)} 66%{transform:translate(-35px,30px) scale(0.95)} }
-        @keyframes cv-drift2 { 0%,100%{transform:translate(0,0) scale(1)} 40%{transform:translate(-55px,-45px) scale(1.06)} 70%{transform:translate(30px,-20px) scale(0.97)} }
-        @keyframes cv-pulse  { 0%,100%{opacity:1} 50%{opacity:0.5} }
-        @keyframes cv-dot    { 0%,80%,100%{transform:scale(1);opacity:.7} 40%{transform:scale(1.5);opacity:1} }
+        @keyframes cv-drift1  { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(50px,70px) scale(1.08)} 66%{transform:translate(-35px,30px) scale(0.95)} }
+        @keyframes cv-drift2  { 0%,100%{transform:translate(0,0) scale(1)} 40%{transform:translate(-55px,-45px) scale(1.06)} 70%{transform:translate(30px,-20px) scale(0.97)} }
+        @keyframes cv-pulse   { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        @keyframes cv-dot     { 0%,80%,100%{transform:scale(1);opacity:.7} 40%{transform:scale(1.5);opacity:1} }
+        @keyframes cv-tap-ring{ 0%,100%{transform:scale(1);opacity:0.7} 50%{transform:scale(1.18);opacity:0.25} }
         .cv-msgs::-webkit-scrollbar { display: none; }
         .cv-msgs { scrollbar-width: none; }
       `}</style>
