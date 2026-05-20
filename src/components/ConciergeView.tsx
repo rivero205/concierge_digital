@@ -236,27 +236,36 @@ export default function ConciergeView() {
     if (!apiKey) return
 
     let blobUrl: string | null = null
+    let cancelled = false
     const elevenlabs = new ElevenLabsClient({ apiKey })
 
     elevenlabs.textToSpeech.convert(ELEVENLABS_VOICE_ID, {
       text: ELEVENLABS_INTRO[lang],
       modelId: 'eleven_v3',
       outputFormat: 'mp3_44100_128',
+      voiceSettings: { stability: 0.5, similarityBoost: 0.8, speed: 1.15 },
     })
       .then(async stream => {
+        if (cancelled) return
         const blob = await new Response(stream as unknown as ReadableStream).blob()
+        if (cancelled) return
         blobUrl = URL.createObjectURL(blob)
         const audio = new Audio(blobUrl)
         audio.onended = () => { if (blobUrl) URL.revokeObjectURL(blobUrl) }
         introAudioRef.current = audio
-        // Try autoplay immediately (works on desktop; blocked silently on mobile)
         audio.play()
           .then(() => { introPlayedRef.current = true })
           .catch(() => { /* will retry on first user interaction */ })
       })
-      .catch(e => console.error('[ElevenLabs]', e))
+      .catch(() => {})
 
-    return () => { if (blobUrl) URL.revokeObjectURL(blobUrl) }
+    return () => {
+      cancelled = true
+      introAudioRef.current?.pause()
+      introAudioRef.current = null
+      introPlayedRef.current = false
+      if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null }
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Play ElevenLabs intro on first user interaction if autoplay was blocked
