@@ -49,12 +49,20 @@ declare global {
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { gsap } from 'gsap'
-import { X, Mic, MicOff, VolumeX, Volume2, Calendar } from 'lucide-react'
+import { Mic, MicOff, VolumeX, Volume2, Calendar } from 'lucide-react'
 import { useGuest } from '../context/GuestContext'
 import TransportCards from './cards/TransportCards'
 import RestaurantCards from './cards/RestaurantCards'
 import ItineraryPanel from './ItineraryPanel'
-import { MATCHES } from '../data/mock'
+
+// ── Language detection ────────────────────────────────────────────────────────
+
+type Lang = 'es' | 'en' | 'pt' | 'fr'
+
+function detectLang(): Lang {
+  const l = navigator.language?.slice(0, 2) ?? 'es'
+  return (['es', 'en', 'pt', 'fr'] as Lang[]).includes(l as Lang) ? (l as Lang) : 'es'
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -67,11 +75,128 @@ type LocalMsg = {
   destination?: string
 }
 
+// ── Multilingual content ──────────────────────────────────────────────────────
+
+function getGreeting(lang: Lang): string {
+  const h = new Date().getHours()
+  const g: Record<Lang, [string, string, string]> = {
+    es: ['Buenos días', 'Buenas tardes', 'Buenas noches'],
+    en: ['Good morning', 'Good afternoon', 'Good evening'],
+    pt: ['Bom dia', 'Boa tarde', 'Boa noite'],
+    fr: ['Bonjour', 'Bonsoir', 'Bonsoir'],
+  }
+  const [morning, afternoon, evening] = g[lang]
+  return h < 12 ? morning : h < 19 ? afternoon : evening
+}
+
+const WELCOME_COPY: Record<Lang, (greeting: string) => string> = {
+  es: g => `${g}. Soy tu concierge exclusivo para el **Mundial FIFA 2026**.\n\nPuedo reservarte transporte al estadio o una mesa en los mejores restaurantes.\n\n¿En qué puedo ayudarte? Escribe o presiona el micrófono.`,
+  en: g => `${g}. I'm your exclusive concierge for the **FIFA World Cup 2026**.\n\nI can book stadium transport or restaurant reservations for you.\n\nHow can I help? Type or press the microphone.`,
+  pt: g => `${g}. Sou seu concierge exclusivo para a **Copa do Mundo FIFA 2026**.\n\nPosso reservar transporte para o estádio ou mesa nos melhores restaurantes.\n\nComo posso ajudar? Digite ou pressione o microfone.`,
+  fr: g => `${g}. Je suis votre concierge exclusif pour la **Coupe du Monde FIFA 2026**.\n\nJe peux réserver du transport vers le stade ou une table dans les meilleurs restaurants.\n\nComment puis-je vous aider ? Tapez ou appuyez sur le micro.`,
+}
+
+const CHIPS_BY_LANG: Record<Lang, { label: string; prompt: string }[]> = {
+  es: [
+    { label: 'TRANSPORTE AL ESTADIO', prompt: 'Necesito transporte al estadio' },
+    { label: 'RESERVAR CENA', prompt: 'Quiero reservar cena esta noche' },
+    { label: 'DRIVER PRIVADO', prompt: 'Quiero un driver privado' },
+    { label: 'MIS RESERVAS', prompt: 'Ver mi itinerario' },
+  ],
+  en: [
+    { label: 'STADIUM TRANSPORT', prompt: 'I need transport to the stadium' },
+    { label: 'BOOK DINNER', prompt: 'I want to book dinner tonight' },
+    { label: 'PRIVATE DRIVER', prompt: 'I want a private driver' },
+    { label: 'MY BOOKINGS', prompt: 'Show my itinerary' },
+  ],
+  pt: [
+    { label: 'TRANSPORTE AO ESTÁDIO', prompt: 'Preciso de transporte para o estádio' },
+    { label: 'RESERVAR JANTAR', prompt: 'Quero reservar jantar esta noite' },
+    { label: 'MOTORISTA PRIVADO', prompt: 'Quero um motorista privado' },
+    { label: 'MINHAS RESERVAS', prompt: 'Ver meu itinerário' },
+  ],
+  fr: [
+    { label: 'TRANSPORT AU STADE', prompt: "J'ai besoin de transport pour le stade" },
+    { label: 'RÉSERVER UN DÎNER', prompt: 'Je veux réserver un dîner ce soir' },
+    { label: 'CHAUFFEUR PRIVÉ', prompt: 'Je veux un chauffeur privé' },
+    { label: 'MES RÉSERVATIONS', prompt: 'Voir mon itinéraire' },
+  ],
+}
+
+const FALLBACK_BY_LANG: Record<Lang, string[]> = {
+  es: [
+    'Claro. ¿Puedo ayudarte con transporte al estadio o con una reserva en algún restaurante?',
+    'Estoy aquí para gestionar tus traslados y reservas de mesa. ¿Qué necesitas?',
+    '¿Prefieres que te muestre opciones de transporte o de restaurantes?',
+  ],
+  en: [
+    'Sure. Can I help you with stadium transport or a restaurant reservation?',
+    "I'm here to handle your transfers and table bookings. What do you need?",
+    'Would you like to see transport options or restaurant choices?',
+  ],
+  pt: [
+    'Claro. Posso ajudar com transporte ao estádio ou uma reserva em restaurante?',
+    'Estou aqui para gerenciar seus traslados e reservas de mesa. O que você precisa?',
+    'Prefere ver opções de transporte ou restaurantes?',
+  ],
+  fr: [
+    'Bien sûr. Puis-je vous aider avec le transport vers le stade ou une réservation au restaurant ?',
+    'Je suis là pour gérer vos transferts et réservations de table. De quoi avez-vous besoin ?',
+    'Préférez-vous voir les options de transport ou de restaurants ?',
+  ],
+}
+
+const THINKING_BY_LANG: Record<Lang, { transport: string; restaurant: string; fallback: string }> = {
+  es: { transport: 'Verificando disponibilidad de transporte', restaurant: 'Buscando las mejores mesas disponibles', fallback: 'Un momento' },
+  en: { transport: 'Checking transport availability', restaurant: 'Finding the best available tables', fallback: 'One moment' },
+  pt: { transport: 'Verificando disponibilidade de transporte', restaurant: 'Procurando as melhores mesas disponíveis', fallback: 'Um momento' },
+  fr: { transport: 'Vérification de la disponibilité du transport', restaurant: 'Recherche des meilleures tables disponibles', fallback: 'Un moment' },
+}
+
+const TRANSPORT_INTRO_BY_LANG: Record<Lang, string> = {
+  es: 'Tenemos estas opciones de transporte disponibles:',
+  en: 'Here are the available transport options:',
+  pt: 'Aqui estão as opções de transporte disponíveis:',
+  fr: 'Voici les options de transport disponibles :',
+}
+
+const RESTAURANT_INTRO_BY_LANG: Record<Lang, string> = {
+  es: 'Estas son las mejores mesas que tenemos para esta noche:',
+  en: 'Here are the best tables available for tonight:',
+  pt: 'Aqui estão as melhores mesas disponíveis para esta noite:',
+  fr: 'Voici les meilleures tables disponibles pour ce soir :',
+}
+
+const ITINERARY_REPLY_BY_LANG: Record<Lang, string> = {
+  es: 'Aquí tienes todas tus reservas confirmadas.',
+  en: 'Here are all your confirmed bookings.',
+  pt: 'Aqui estão todas as suas reservas confirmadas.',
+  fr: 'Voici toutes vos réservations confirmées.',
+}
+
+const PLACEHOLDER_BY_LANG: Record<Lang, { idle: string; thinking: string }> = {
+  es: { idle: 'Escríbeme o usa el micrófono...', thinking: 'Un momento...' },
+  en: { idle: 'Type or use the microphone...', thinking: 'One moment...' },
+  pt: { idle: 'Digite ou use o microfone...', thinking: 'Um momento...' },
+  fr: { idle: 'Tapez ou utilisez le micro...', thinking: 'Un moment...' },
+}
+
 // ── Intent detection ──────────────────────────────────────────────────────────
 
-const TRANSPORT_KW = ['transporte', 'driver', 'estadio', 'transfer', 'auto', 'carro', 'van', 'uber', 'ride', 'llevar', 'traslado', 'transport', 'car', 'vehicle']
-const RESTAURANT_KW = ['cena', 'cenar', 'restaurante', 'comer', 'mesa', 'dinner', 'food', 'eat', 'reservar', 'restaurant', 'hambre', 'hungry', 'table']
-const ITINERARY_KW = ['itinerario', 'reservas', 'mis planes', 'agenda', 'bookings', 'reservaciones', 'schedule']
+const TRANSPORT_KW = [
+  'transporte', 'driver', 'estadio', 'transfer', 'auto', 'carro', 'van', 'uber', 'ride',
+  'llevar', 'traslado', 'transport', 'car', 'vehicle', 'stadium', 'chauffeur', 'taxi',
+  'motorista', 'estádio', 'coche', 'bus', 'shuttle', 'pickup', 'llevame',
+]
+const RESTAURANT_KW = [
+  'cena', 'cenar', 'restaurante', 'comer', 'mesa', 'dinner', 'food', 'eat', 'reservar',
+  'restaurant', 'hambre', 'hungry', 'table', 'jantar', 'dîner', 'repas', 'manger', 'comida',
+  'almuerzo', 'lunch', 'brunch', 'desayuno', 'breakfast', 'reserva', 'booking', 'resto',
+]
+const ITINERARY_KW = [
+  'itinerario', 'reservas', 'mis planes', 'agenda', 'bookings', 'reservaciones', 'schedule',
+  'itinerary', 'my bookings', 'minhas reservas', 'mes réservations', 'planes', 'ver reservas',
+]
 
 function detectIntent(text: string): 'transport' | 'restaurant' | 'itinerary' | 'fallback' {
   const low = text.toLowerCase()
@@ -81,36 +206,6 @@ function detectIntent(text: string): 'transport' | 'restaurant' | 'itinerary' | 
   return 'fallback'
 }
 
-// ── Greeting ──────────────────────────────────────────────────────────────────
-
-function getGreeting(): string {
-  const h = new Date().getHours()
-  if (h < 12) return 'Buenos días'
-  if (h < 19) return 'Buenas tardes'
-  return 'Buenas noches'
-}
-
-function buildWelcome(guest: { title: string; lastName: string; firstName: string; hotel: string; matches: string[] }): string {
-  const name = [guest.title, guest.lastName].filter(Boolean).join(' ') || guest.firstName || 'estimado huésped'
-  const hotel = guest.hotel || 'tu hotel'
-  const match = MATCHES.find(m => guest.matches.includes(m.id))
-  let msg = `${getGreeting()}, ${name}. Soy tu concierge exclusivo durante tu estadía en **${hotel}**.\n\n`
-  if (match) {
-    msg += `Veo que tienes el partido **${match.teams}** el ${match.date}. ¿Quieres que arranquemos con el transfer al ${match.stadium}?\n\n`
-  }
-  msg += `¿En qué puedo ayudarte hoy?`
-  return msg
-}
-
-// ── Fallback responses ────────────────────────────────────────────────────────
-
-const FALLBACK_RESPONSES = [
-  'Claro. ¿Puedo ayudarte con transporte al estadio o con una reserva en algún restaurante?',
-  'Entendido. Estoy aquí para gestionar tus traslados, reservas de mesa y todo lo que necesites durante tu estadía.',
-  '¿Prefieres que te muestre opciones de transporte o de restaurantes para esta noche?',
-]
-let fallbackIdx = 0
-
 // ── renderMsg ─────────────────────────────────────────────────────────────────
 
 function renderMsg(text: string) {
@@ -119,14 +214,21 @@ function renderMsg(text: string) {
     .replace(/\n/g, '<br/>')
 }
 
-// ── TTS helper ────────────────────────────────────────────────────────────────
+// ── TTS / SR locale maps ──────────────────────────────────────────────────────
 
-function speak(text: string, lang: string, muted: boolean) {
+const LOCALE: Record<Lang, string> = {
+  es: 'es-MX',
+  en: 'en-US',
+  pt: 'pt-BR',
+  fr: 'fr-FR',
+}
+
+function speak(text: string, lang: Lang, muted: boolean) {
   if (muted || !('speechSynthesis' in window)) return
   window.speechSynthesis.cancel()
   const clean = text.replace(/\*\*/g, '').replace(/<[^>]+>/g, '')
   const utt = new SpeechSynthesisUtterance(clean)
-  utt.lang = lang === 'es' ? 'es-MX' : lang === 'en' ? 'en-US' : lang === 'pt' ? 'pt-BR' : lang
+  utt.lang = LOCALE[lang]
   utt.rate = 0.9
   const voices = window.speechSynthesis.getVoices()
   const preferred = voices.find(v => v.lang.startsWith(utt.lang) && v.name.toLowerCase().includes('female'))
@@ -135,21 +237,13 @@ function speak(text: string, lang: string, muted: boolean) {
   window.speechSynthesis.speak(utt)
 }
 
-// ── Chips ─────────────────────────────────────────────────────────────────────
-
-const CHIPS = [
-  { label: 'TRANSPORTE AL ESTADIO', prompt: 'Necesito transporte al estadio' },
-  { label: 'RESERVAR CENA', prompt: 'Quiero reservar cena esta noche' },
-  { label: 'DRIVER PRIVADO', prompt: 'Quiero un driver privado' },
-  { label: 'PLAN DÍA DE PARTIDO', prompt: '¿Cómo organizo mi día de partido?' },
-]
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 type Phase = 'intro' | 'interface'
 
-export default function ConciergeView({ onClose }: { onClose: () => void }) {
+export default function ConciergeView() {
   const { guest } = useGuest()
+  const [lang] = useState<Lang>(() => detectLang())
   const [phase, setPhase] = useState<Phase>('intro')
   const [messages, setMessages] = useState<LocalMsg[]>([])
   const [input, setInput] = useState('')
@@ -160,8 +254,8 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
   const [listening, setListening] = useState(false)
   const [newBookingCount, setNewBookingCount] = useState(0)
   const prevBookingsLen = useRef(guest.bookings.length)
+  const fallbackIdx = useRef(0)
 
-  // Refs
   const rootRef = useRef<HTMLDivElement>(null)
   const gooeyWrapRef = useRef<HTMLDivElement>(null)
   const blob1Ref = useRef<HTMLDivElement>(null)
@@ -175,7 +269,6 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
   const simRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
 
-  // Badge counter for new bookings
   useEffect(() => {
     if (guest.bookings.length > prevBookingsLen.current) {
       setNewBookingCount(c => c + (guest.bookings.length - prevBookingsLen.current))
@@ -183,7 +276,6 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
     prevBookingsLen.current = guest.bookings.length
   }, [guest.bookings.length])
 
-  // Lock body scroll
   useEffect(() => {
     const scrollY = window.scrollY
     document.body.style.position = 'fixed'
@@ -197,34 +289,29 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
     }
   }, [])
 
-  // Cleanup timers + TTS on unmount
   useEffect(() => () => {
     if (thinkRef.current) clearTimeout(thinkRef.current)
     if (simRef.current) clearInterval(simRef.current)
     window.speechSynthesis?.cancel()
   }, [])
 
-  // Scroll to bottom
   useEffect(() => {
     const el = msgsRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, thinking])
 
-  // Focus input when interface appears
   useEffect(() => {
     if (phase === 'interface') setTimeout(() => inputRef.current?.focus(), 200)
   }, [phase])
 
-  // Set welcome message when interface phase starts
   useEffect(() => {
     if (phase === 'interface' && messages.length === 0) {
-      const welcome = buildWelcome(guest)
+      const welcome = WELCOME_COPY[lang](getGreeting(lang))
       setMessages([{ role: 'assistant', content: welcome }])
-      speak(welcome, guest.language, muted)
+      speak(welcome, lang, muted)
     }
   }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // GSAP blob intro animation
   useEffect(() => {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (reduced) {
@@ -252,7 +339,6 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
     return () => ctx.revert()
   }, [])
 
-  // ── Simulate typing for assistant messages ────────────────────────────────
   const simulateText = useCallback((content: string, type?: MsgType, extra?: Partial<LocalMsg>) => {
     const newMsg: LocalMsg = { role: 'assistant', content: '', type, ...extra }
     setMessages(prev => [...prev, newMsg])
@@ -268,63 +354,56 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
       if (i >= content.length) {
         clearInterval(simRef.current!)
         simRef.current = null
-        speak(content, guest.language, muted)
+        speak(content, lang, muted)
       }
     }, 18)
-  }, [guest.language, muted])
+  }, [lang, muted])
 
-  // ── Send message ──────────────────────────────────────────────────────────
   function send(text: string) {
     if (!text.trim() || thinking) return
     setInput('')
     setMessages(prev => [...prev, { role: 'user', content: text }])
 
     const intent = detectIntent(text)
+    const t = THINKING_BY_LANG[lang]
 
     if (intent === 'itinerary') {
       setShowItinerary(true)
       setNewBookingCount(0)
-      simulateText('Aquí tienes todas tus reservas confirmadas.')
+      simulateText(ITINERARY_REPLY_BY_LANG[lang])
       return
     }
 
     if (intent === 'transport') {
-      setThinkingMsg('Verificando disponibilidad de transporte')
+      setThinkingMsg(t.transport)
       setThinking(true)
       thinkRef.current = setTimeout(() => {
         setThinking(false)
-        simulateText('Tenemos estas opciones de transporte disponibles desde tu hotel:', 'transport', { destination: 'Estadio Azteca' })
+        simulateText(TRANSPORT_INTRO_BY_LANG[lang], 'transport', { destination: 'Estadio Azteca' })
       }, 1400)
       return
     }
 
     if (intent === 'restaurant') {
-      setThinkingMsg('Buscando las mejores mesas disponibles')
+      setThinkingMsg(t.restaurant)
       setThinking(true)
       thinkRef.current = setTimeout(() => {
         setThinking(false)
-        simulateText('Estas son las mejores mesas que tenemos para esta noche:', 'restaurant')
+        simulateText(RESTAURANT_INTRO_BY_LANG[lang], 'restaurant')
       }, 1400)
       return
     }
 
-    // Fallback
-    setThinkingMsg('Un momento')
+    setThinkingMsg(t.fallback)
     setThinking(true)
     thinkRef.current = setTimeout(() => {
       setThinking(false)
-      simulateText(FALLBACK_RESPONSES[fallbackIdx % FALLBACK_RESPONSES.length])
-      fallbackIdx++
+      const responses = FALLBACK_BY_LANG[lang]
+      simulateText(responses[fallbackIdx.current % responses.length])
+      fallbackIdx.current++
     }, 900)
   }
 
-  // ── Chips ─────────────────────────────────────────────────────────────────
-  function sendChip(chip: typeof CHIPS[0]) {
-    if (thinking) return
-    send(chip.prompt)
-  }
-
-  // ── Voice input ───────────────────────────────────────────────────────────
   function toggleVoice() {
     const SR: SpeechRecognitionConstructor | undefined = window.SpeechRecognition ?? window.webkitSpeechRecognition
     if (!SR) return
@@ -336,7 +415,7 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
     }
 
     const rec = new SR()
-    rec.lang = guest.language === 'es' ? 'es-MX' : guest.language === 'en' ? 'en-US' : guest.language
+    rec.lang = LOCALE[lang]
     rec.interimResults = false
     rec.maxAlternatives = 1
     rec.onresult = (e: SpeechRecognitionEvent) => {
@@ -351,15 +430,16 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
     setListening(true)
   }
 
-  // ── Booking confirmation handler ──────────────────────────────────────────
   function handleBooked(confirmMsg: string) {
     setMessages(prev => [...prev, { role: 'assistant', content: confirmMsg }])
-    speak(confirmMsg, guest.language, muted)
+    speak(confirmMsg, lang, muted)
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
   const hasSpeechRecognition = typeof window !== 'undefined' &&
     (!!window.SpeechRecognition || !!window.webkitSpeechRecognition)
+
+  const chips = CHIPS_BY_LANG[lang]
+  const placeholder = PLACEHOLDER_BY_LANG[lang]
 
   return (
     <div ref={rootRef} style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#000', fontFamily: '"Anton", sans-serif', overflow: 'hidden' }}>
@@ -404,18 +484,16 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
 
         {/* Top bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 28px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
-          <div onClick={onClose} style={{ display: 'flex', alignItems: 'baseline', gap: 10, cursor: 'pointer' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <span style={{ fontFamily: '"Anton", sans-serif', color: '#FFF', fontSize: 22, letterSpacing: '0.12em', textTransform: 'uppercase' }}>CONCIERGE</span>
             <span style={{ fontFamily: '"Condiment", cursive', fontSize: 22, color: '#C8FF00' }}>Digital</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', fontFamily: '"Anton", sans-serif' }}>FIFA 2026 · MX</span>
-            {/* Mute toggle */}
             <button onClick={() => setMuted(m => !m)}
               style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: muted ? 'rgba(255,255,255,0.25)' : '#C8FF00', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
             </button>
-            {/* Itinerary button with badge */}
             <button onClick={() => { setShowItinerary(true); setNewBookingCount(0) }}
               style={{ position: 'relative', width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Calendar size={13} />
@@ -424,11 +502,6 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
                   <span style={{ fontSize: 8, color: '#000', fontFamily: '"Anton", sans-serif' }}>{newBookingCount}</span>
                 </div>
               )}
-            </button>
-            {/* Close */}
-            <button onClick={onClose}
-              style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <X size={13} />
             </button>
           </div>
         </div>
@@ -443,7 +516,6 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
                 </div>
               )}
               <div style={{ flex: (m.type === 'transport' || m.type === 'restaurant') ? 1 : undefined, minWidth: 0, maxWidth: m.role === 'user' ? '62%' : '90%' }}>
-                {/* Text content */}
                 <div style={{
                   ...(m.role === 'user'
                     ? { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: '18px 18px 3px 18px', padding: '11px 16px' }
@@ -454,11 +526,9 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
                     dangerouslySetInnerHTML={{ __html: renderMsg(m.content) }}
                   />
                 </div>
-                {/* Transport cards inline */}
                 {m.type === 'transport' && (
                   <TransportCards destination={m.destination ?? 'Estadio Azteca'} onBooked={handleBooked} />
                 )}
-                {/* Restaurant cards inline */}
                 {m.type === 'restaurant' && (
                   <RestaurantCards onBooked={handleBooked} />
                 )}
@@ -466,7 +536,6 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
             </div>
           ))}
 
-          {/* Thinking indicator */}
           {thinking && (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
               <div style={{ flexShrink: 0, width: 24, height: 24, borderRadius: '50%', background: '#C8FF00', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -484,8 +553,8 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
 
         {/* Quick action chips */}
         <div style={{ maxWidth: 860, width: '100%', margin: '0 auto', padding: '10px clamp(16px,5vw,48px) 0', boxSizing: 'border-box', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {CHIPS.map(c => (
-            <button key={c.label} onClick={() => sendChip(c)} disabled={thinking}
+          {chips.map(c => (
+            <button key={c.label} onClick={() => !thinking && send(c.prompt)} disabled={thinking}
               style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 100, padding: '7px 16px', color: thinking ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.45)', fontSize: 10, cursor: thinking ? 'default' : 'pointer', letterSpacing: '0.14em', textTransform: 'uppercase', transition: 'all 0.2s', fontFamily: '"Anton", sans-serif' }}
               onMouseEnter={e => { if (thinking) return; e.currentTarget.style.borderColor = '#C8FF00'; e.currentTarget.style.color = '#C8FF00' }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; e.currentTarget.style.color = thinking ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.45)' }}>
@@ -502,18 +571,25 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send(input)}
-              placeholder={thinking ? 'Un momento...' : 'Escríbeme o usa el micrófono...'}
+              placeholder={thinking ? placeholder.thinking : placeholder.idle}
               disabled={thinking}
               style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#EFF4FF', fontSize: 'clamp(13px,1.4vw,15px)', padding: '12px 0', fontFamily: 'system-ui, sans-serif' }}
             />
-            {/* Mic button — only if browser supports it */}
             {hasSpeechRecognition && (
               <button onClick={toggleVoice}
-                style={{ width: 40, height: 40, borderRadius: 12, border: 'none', flexShrink: 0, background: listening ? 'rgba(255,60,60,0.15)' : 'rgba(255,255,255,0.07)', color: listening ? '#FF4444' : 'rgba(255,255,255,0.4)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: listening ? 'cv-pulse 1.2s ease infinite' : 'none' }}>
-                {listening ? <MicOff size={15} /> : <Mic size={15} />}
+                style={{
+                  width: 52, height: 52, borderRadius: 14, flexShrink: 0,
+                  border: listening ? '2px solid #FF4444' : '2px solid #C8FF00',
+                  background: listening ? 'rgba(255,60,60,0.15)' : 'rgba(200,255,0,0.08)',
+                  color: listening ? '#FF4444' : '#C8FF00',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: listening ? '0 0 18px rgba(255,68,68,0.4)' : '0 0 14px rgba(200,255,0,0.25)',
+                  animation: listening ? 'cv-pulse 1.2s ease infinite' : 'none',
+                  transition: 'all 0.2s',
+                }}>
+                {listening ? <MicOff size={22} /> : <Mic size={22} />}
               </button>
             )}
-            {/* Send button */}
             <button
               onClick={() => send(input)}
               disabled={!input.trim() || thinking}
@@ -529,18 +605,15 @@ export default function ConciergeView({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* Itinerary panel overlay */}
         {showItinerary && (
           <ItineraryPanel onClose={() => setShowItinerary(false)} />
         )}
       </div>
 
-      {/* CSS Keyframes */}
       <style>{`
         @keyframes cv-drift1 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(50px,70px) scale(1.08)} 66%{transform:translate(-35px,30px) scale(0.95)} }
         @keyframes cv-drift2 { 0%,100%{transform:translate(0,0) scale(1)} 40%{transform:translate(-55px,-45px) scale(1.06)} 70%{transform:translate(30px,-20px) scale(0.97)} }
         @keyframes cv-pulse  { 0%,100%{opacity:1} 50%{opacity:0.5} }
-        @keyframes cv-blink  { 0%,100%{opacity:1} 50%{opacity:0} }
         @keyframes cv-dot    { 0%,80%,100%{transform:scale(1);opacity:.7} 40%{transform:scale(1.5);opacity:1} }
         .cv-msgs::-webkit-scrollbar { display: none; }
         .cv-msgs { scrollbar-width: none; }
