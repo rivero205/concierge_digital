@@ -1,5 +1,5 @@
 // src/components/ConciergeView.tsx
-
+//MaicolVivero_TheBest
 // ── SpeechRecognition type shims ───────────────────────────────────────────────
 interface SpeechRecognitionAlternative { readonly transcript: string; readonly confidence: number }
 interface SpeechRecognitionResult { readonly length: number; readonly isFinal: boolean; item(index: number): SpeechRecognitionAlternative; [index: number]: SpeechRecognitionAlternative }
