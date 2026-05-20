@@ -224,8 +224,11 @@ export default function ConciergeView() {
   const thinkRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const simRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
+  // ElevenLabs intro — prefetched, played on first interaction if autoplay was blocked
+  const introAudioRef = useRef<HTMLAudioElement | null>(null)
+  const introPlayedRef = useRef(false)
 
-  // Fetch ElevenLabs intro audio on mount and play immediately when ready
+  // Prefetch ElevenLabs intro audio immediately on mount
   useEffect(() => {
     const apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY
     if (!apiKey) return
@@ -248,12 +251,24 @@ export default function ConciergeView() {
         blobUrl = URL.createObjectURL(blob)
         const audio = new Audio(blobUrl)
         audio.onended = () => { if (blobUrl) URL.revokeObjectURL(blobUrl) }
-        audio.play().catch(() => {})
+        introAudioRef.current = audio
+        // Try autoplay immediately (works on desktop; blocked silently on mobile)
+        audio.play()
+          .then(() => { introPlayedRef.current = true })
+          .catch(() => { /* will retry on first user interaction */ })
       })
       .catch(() => {})
 
     return () => { if (blobUrl) URL.revokeObjectURL(blobUrl) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Play ElevenLabs intro on first user interaction if autoplay was blocked
+  function playIntroIfPending() {
+    const audio = introAudioRef.current
+    if (!audio || introPlayedRef.current) return
+    introPlayedRef.current = true
+    if (audio.paused) audio.play().catch(() => {})
+  }
 
   useEffect(() => {
     if (guest.bookings.length > prevBookingsLen.current) {
@@ -346,6 +361,7 @@ export default function ConciergeView() {
 
   function send(text: string) {
     if (!text.trim() || thinking) return
+    playIntroIfPending()
     setInput('')
     setMessages(prev => [...prev, { role: 'user', content: text }])
     const intent = detectIntent(text)
@@ -382,6 +398,7 @@ export default function ConciergeView() {
   }
 
   function toggleVoice() {
+    playIntroIfPending()
     const SR: SpeechRecognitionConstructor | undefined = window.SpeechRecognition ?? window.webkitSpeechRecognition
     if (!SR) return
     if (listening) { recognitionRef.current?.stop(); setListening(false); return }
